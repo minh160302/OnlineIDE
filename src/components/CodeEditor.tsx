@@ -7,7 +7,7 @@ import {
   ResizablePanel,
   ResizablePanelGroup,
 } from "@/components/ui/resizable";
-import Editor, { Monaco } from "@monaco-editor/react";
+import Editor from "@monaco-editor/react";
 import { Button } from "./ui/button";
 import { Loader, Play } from "lucide-react";
 import { useRef, useState } from "react";
