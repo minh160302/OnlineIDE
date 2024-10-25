@@ -1,24 +1,29 @@
 "use client";
-import { useTheme } from "next-themes";
-import { ModeToggleBtn } from "./mode-toggle-btn";
-import SelectLanguages from "./SelectLanguages";
+import { compileCode } from "@/actions/compile";
 import {
   ResizableHandle,
   ResizablePanel,
   ResizablePanelGroup,
 } from "@/components/ui/resizable";
-import Editor from "@monaco-editor/react";
-import { Button } from "./ui/button";
-import { Loader, Play } from "lucide-react";
-import { useRef, useState } from "react";
 import {
   Language,
   LanguageOptionProps,
   languageOptions,
 } from "@/config/config";
-import { compileCode } from "@/actions/compile";
 import { useToast } from "@/hooks/use-toast";
+import Editor from "@monaco-editor/react";
+import { Loader, Play } from "lucide-react";
+import { useTheme } from "next-themes";
+import { useRef, useState } from "react";
+import { ModeToggleBtn } from "./mode-toggle-btn";
+import SelectLanguages from "./SelectLanguages";
+import { Button } from "./ui/button";
 import { ToastAction } from "./ui/toast";
+import * as Y from "yjs";
+import { WebrtcProvider } from "y-webrtc";
+import { MonacoBinding } from "y-monaco";
+import { editor as MonacoEditor } from "monaco-editor";
+import RandomColor from "randomcolor";
 
 export type SourceCodeProps = {
   [key in Language]?: string;
@@ -37,13 +42,52 @@ export default function CodeEditor() {
   const [selectedLanguage, setSelectedLanguage] = useState<LanguageOptionProps>(
     languageOptions[0]
   );
-  const editorRef = useRef(null); // focus on code editor onMount
+  const editorRef = useRef<MonacoEditor.IStandaloneCodeEditor>(); // focus on code editor onMount
   const [loading, setLoading] = useState<boolean>(false);
   const [output, setOutput] = useState<string[]>([]);
 
-  const handleEditorDidMount = (editor: any) => {
+  const handleEditorDidMount = (editor: MonacoEditor.IStandaloneCodeEditor) => {
+    // Cursor focus
     editorRef.current = editor;
     editor.focus();
+    // Initialize YJS
+    const doc = new Y.Doc();
+    // Connect to peers with WebRTC
+    const provider = new WebrtcProvider("test-room", doc, {
+      password: "password",
+      maxConns: 10,
+      signaling: [
+        // "wss://localhost:4444",
+        "wss://signaling.yjs.dev",
+        // "wss://y-webrtc-signaling-eu.herokuapp.com",
+        // "wss://y-webrtc-signaling-us.herokuapp.com",
+      ],
+    });
+    const type = doc.getText("monaco");
+    const awareness = provider.awareness;
+    const color = RandomColor(); //Provied any random color to be used for each user
+    awareness.setLocalStateField("user", {
+      name: "Users Name",
+      color: color,
+    });
+
+    // Bind YJS to Monaco
+    const binding = new MonacoBinding(
+      type,
+      editorRef.current.getModel() as MonacoEditor.ITextModel,
+      new Set([editorRef.current]),
+      awareness
+    );
+
+    console.log(provider.awareness);
+    console.log("doc", doc);
+
+    return () => {
+      if (provider) {
+        provider.disconnect(); //We destroy doc we created and disconnect
+        doc.destroy(); //the provider to stop propagting changes if user leaves editor
+      }
+    };
   };
 
   const handleEditorChange = (value: string | undefined) => {
